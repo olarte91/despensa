@@ -3,6 +3,3 @@ target
 *.db
 .vscode
 .idea
-*.class
-*.jar
-!*.jar
