@@ -7,10 +7,10 @@ import javax.sql.DataSource;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.boot.autoconfigure.jdbc.DataSourceProperties;
 import org.springframework.boot.jdbc.DataSourceBuilder;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.env.Environment;
 
 @Configuration
 public class DatabaseConfig {
@@ -18,37 +18,37 @@ public class DatabaseConfig {
     private static final Logger log = LoggerFactory.getLogger(DatabaseConfig.class);
 
     @Bean
-    public DataSource dataSource(DataSourceProperties properties) throws URISyntaxException {
-        String databaseUrl = env("DATABASE_URL");
-        if (databaseUrl == null) {
-            databaseUrl = env("RE_DATABASE_URL");
+    public DataSource dataSource(Environment env) throws URISyntaxException {
+        String url;
+        String username;
+        String password;
+
+        String databaseUrl = env.getProperty("DATABASE_URL");
+        if (databaseUrl == null || databaseUrl.isBlank()) {
+            databaseUrl = env.getProperty("RE_DATABASE_URL");
         }
 
-        if (databaseUrl == null) {
-            log.info("DATABASE_URL no definida; usando properties locales");
-            return properties.initializeDataSourceBuilder().build();
+        if (databaseUrl != null && !databaseUrl.isBlank()) {
+            URI uri = new URI(databaseUrl);
+            String userInfo = uri.getUserInfo();
+            username = userInfo != null ? userInfo.split(":", 2)[0] : null;
+            password = userInfo != null && userInfo.contains(":") ? userInfo.split(":", 2)[1] : null;
+            url = "jdbc:postgresql://" + uri.getHost() + ":"
+                    + (uri.getPort() > 0 ? uri.getPort() : 5432) + uri.getPath()
+                    + (uri.getQuery() != null ? "?" + uri.getQuery() : "");
+        } else {
+            url = env.getProperty("spring.datasource.url", "jdbc:postgresql://localhost:5432/despensa");
+            username = env.getProperty("spring.datasource.username", "postgres");
+            password = env.getProperty("spring.datasource.password", "postgres");
         }
 
-        URI uri = new URI(databaseUrl);
-        String userInfo = uri.getUserInfo();
-        String username = userInfo != null ? userInfo.split(":", 2)[0] : null;
-        String password = userInfo != null && userInfo.contains(":") ? userInfo.split(":", 2)[1] : null;
-        String jdbcUrl = "jdbc:postgresql://" + uri.getHost() + ":"
-                + (uri.getPort() > 0 ? uri.getPort() : 5432) + uri.getPath()
-                + (uri.getQuery() != null ? "?" + uri.getQuery() : "");
-
-        log.info("Conectando a la base de datos {}", uri.getHost());
+        log.info("Conectando a la base de datos {}", url);
 
         return DataSourceBuilder.create()
                 .driverClassName("org.postgresql.Driver")
-                .url(jdbcUrl)
+                .url(url)
                 .username(username)
                 .password(password)
                 .build();
-    }
-
-    private static String env(String name) {
-        String value = System.getenv(name);
-        return value != null && !value.isBlank() ? value : null;
     }
 }
